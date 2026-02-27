@@ -124,6 +124,7 @@ app.Use(async (context, next) =>
         var (statusCode, title) = exception switch
         {
             ArgumentException => ((int)HttpStatusCode.BadRequest, "Некорректные данные запроса"),
+            InvalidOperationException => ((int)HttpStatusCode.Conflict, "Конфликт данных"),
             KeyNotFoundException => ((int)HttpStatusCode.NotFound, "Ресурс не найден"),
             UnauthorizedAccessException => ((int)HttpStatusCode.Unauthorized, "Доступ запрещён"),
             HttpRequestException httpEx when httpEx.StatusCode.HasValue => ((int)httpEx.StatusCode.Value, "Ошибка внешнего сервиса"),

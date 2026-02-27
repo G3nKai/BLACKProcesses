@@ -17,6 +17,6 @@ public sealed class CoreServiceClient(HttpClient client, ILogger<CoreServiceClie
 
         var error = await response.Content.ReadAsStringAsync(cancellationToken);
         logger.LogWarning("CoreService status sync failed: {StatusCode} {Error}", response.StatusCode, error);
-        throw new HttpRequestException($"CoreService error during status sync: {(int)response.StatusCode}");
+        throw new HttpRequestException($"CoreService error during status sync: {(int)response.StatusCode}", null, response.StatusCode);
     }
 }
