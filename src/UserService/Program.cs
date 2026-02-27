@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
+using Microsoft.OpenApi.Models;
 using System.Text;
 using System.Text.Json.Serialization;
 using UserService.Data;
@@ -13,7 +14,33 @@ builder.Services
     .AddJsonOptions(options => options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter()));
 
 builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddSwaggerGen();
+builder.Services.AddSwaggerGen(options =>
+{
+    options.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
+    {
+        Name = "Authorization",
+        Type = SecuritySchemeType.Http,
+        Scheme = "bearer",
+        BearerFormat = "JWT",
+        In = ParameterLocation.Header,
+        Description = "Введите только JWT токен (без префикса Bearer)"
+    });
+
+    options.AddSecurityRequirement(new OpenApiSecurityRequirement
+    {
+        {
+            new OpenApiSecurityScheme
+            {
+                Reference = new OpenApiReference
+                {
+                    Type = ReferenceType.SecurityScheme,
+                    Id = "Bearer"
+                }
+            },
+            Array.Empty<string>()
+        }
+    });
+});
 builder.Services.AddDbContext<UserDbContext>(options =>
     options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
 
@@ -47,6 +74,34 @@ builder.Services
             ValidAudience = jwtAudience,
             ValidateLifetime = true,
             ClockSkew = TimeSpan.FromMinutes(1)
+        };
+
+        options.Events = new JwtBearerEvents
+        {
+            OnMessageReceived = context =>
+            {
+                var authorization = context.Request.Headers.Authorization.ToString();
+                if (string.IsNullOrWhiteSpace(authorization))
+                {
+                    return Task.CompletedTask;
+                }
+
+                const string bearerPrefix = "Bearer ";
+                var token = authorization.Trim();
+
+                if (token.StartsWith(bearerPrefix, StringComparison.OrdinalIgnoreCase))
+                {
+                    token = token[bearerPrefix.Length..].Trim();
+                }
+
+                if (token.StartsWith(bearerPrefix, StringComparison.OrdinalIgnoreCase))
+                {
+                    token = token[bearerPrefix.Length..].Trim();
+                }
+
+                context.Token = token;
+                return Task.CompletedTask;
+            }
         };
     });
 
