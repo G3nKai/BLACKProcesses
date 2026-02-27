@@ -4,9 +4,9 @@ using UserService.Domain.Enums;
 namespace UserService.Contracts.Requests;
 
 public sealed record CreateUserAdminRequest(
-    [property: Required, EmailAddress] string Email,
-    [property: Required] string FirstName,
-    [property: Required] string LastName,
+    [param: Required, EmailAddress] string Email,
+    [param: Required] string FirstName,
+    [param: Required] string LastName,
     string? Phone,
-    [property: Required] UserRole Role,
-    [property: Required, MinLength(8)] string Password);
+    [param: Required] UserRole Role,
+    [param: Required, MinLength(8)] string Password);
