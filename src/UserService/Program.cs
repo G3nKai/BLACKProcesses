@@ -113,31 +113,39 @@ builder.Services.AddAuthorization();
 
 var app = builder.Build();
 
-app.UseExceptionHandler(errorApp =>
+app.Use(async (context, next) =>
 {
-    errorApp.Run(async context =>
+    try
     {
-        var exception = context.Features.Get<IExceptionHandlerFeature>()?.Error;
-
+        await next();
+    }
+    catch (Exception exception)
+    {
         var (statusCode, title) = exception switch
         {
             ArgumentException => ((int)HttpStatusCode.BadRequest, "Некорректные данные запроса"),
             KeyNotFoundException => ((int)HttpStatusCode.NotFound, "Ресурс не найден"),
             UnauthorizedAccessException => ((int)HttpStatusCode.Unauthorized, "Доступ запрещён"),
+            HttpRequestException httpEx when httpEx.StatusCode.HasValue => ((int)httpEx.StatusCode.Value, "Ошибка внешнего сервиса"),
+            HttpRequestException => ((int)HttpStatusCode.BadGateway, "Внешний сервис недоступен"),
             _ => ((int)HttpStatusCode.BadRequest, "Ошибка обработки запроса")
         };
 
-        context.Response.StatusCode = statusCode;
-        context.Response.ContentType = "application/problem+json";
-
-        await context.Response.WriteAsJsonAsync(new
+        if (!context.Response.HasStarted)
         {
-            title,
-            status = statusCode,
-            detail = exception?.Message,
-            traceId = context.TraceIdentifier
-        });
-    });
+            context.Response.Clear();
+            context.Response.StatusCode = statusCode;
+            context.Response.ContentType = "application/problem+json";
+
+            await context.Response.WriteAsJsonAsync(new
+            {
+                title,
+                status = statusCode,
+                detail = exception.Message,
+                traceId = context.TraceIdentifier
+            });
+        }
+    }
 });
 
 app.UseSwagger();
