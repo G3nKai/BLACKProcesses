@@ -56,9 +56,11 @@ builder.Services.AddHttpClient<ICoreServiceClient, CoreServiceClient>(client =>
     client.BaseAddress = new Uri(builder.Configuration["Services:CoreServiceUrl"] ?? "http://localhost:5000/api/");
 });
 
-var jwtIssuer = builder.Configuration["Jwt:Issuer"] ?? "black.auth";
-var jwtAudience = builder.Configuration["Jwt:Audience"] ?? "black.api";
-var jwtKey = builder.Configuration["Jwt:SigningKey"] ?? "PLEASE_CHANGE_ME_FOR_LOCAL_DEV_ONLY";
+var jwtIssuer = builder.Configuration["Jwt:Issuer"];
+var jwtAudience = builder.Configuration["Jwt:Audience"];
+var jwtKey = builder.Configuration["Jwt:SigningKey"]
+    ?? builder.Configuration["Jwt:Key"]
+    ?? "PLEASE_CHANGE_ME_FOR_LOCAL_DEV_ONLY";
 
 builder.Services
     .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
@@ -68,9 +70,9 @@ builder.Services
         {
             ValidateIssuerSigningKey = true,
             IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtKey)),
-            ValidateIssuer = true,
+            ValidateIssuer = !string.IsNullOrWhiteSpace(jwtIssuer),
             ValidIssuer = jwtIssuer,
-            ValidateAudience = true,
+            ValidateAudience = !string.IsNullOrWhiteSpace(jwtAudience),
             ValidAudience = jwtAudience,
             ValidateLifetime = true,
             ClockSkew = TimeSpan.FromMinutes(1)
@@ -89,12 +91,7 @@ builder.Services
                 const string bearerPrefix = "Bearer ";
                 var token = authorization.Trim();
 
-                if (token.StartsWith(bearerPrefix, StringComparison.OrdinalIgnoreCase))
-                {
-                    token = token[bearerPrefix.Length..].Trim();
-                }
-
-                if (token.StartsWith(bearerPrefix, StringComparison.OrdinalIgnoreCase))
+                while (token.StartsWith(bearerPrefix, StringComparison.OrdinalIgnoreCase))
                 {
                     token = token[bearerPrefix.Length..].Trim();
                 }
