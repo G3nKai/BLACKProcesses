@@ -1,5 +1,4 @@
 using Microsoft.EntityFrameworkCore;
-using System.Data;
 using System.Security.Claims;
 using UserService.Contracts.Common;
 using UserService.Contracts.Requests;
@@ -17,55 +16,32 @@ public interface IUserManagementService
     Task<UserResponse> UpdateStatusAsync(Guid userId, UpdateUserStatusRequest request, CancellationToken cancellationToken);
 }
 
-public sealed class UserManagementService(
-    UserDbContext dbContext,
-    IAuthServiceClient authServiceClient,
-    ICoreServiceClient coreServiceClient,
-    ILogger<UserManagementService> logger,
-    IHttpContextAccessor httpContextAccessor) : IUserManagementService
+public sealed class UserManagementService : IUserManagementService
 {
+    private readonly UserDbContext _dbContext;
+    private readonly IAuthServiceClient _authServiceClient;
+    private readonly ICoreServiceClient _coreServiceClient;
+    private readonly ILogger<UserManagementService> _logger;
+    private readonly IHttpContextAccessor _httpContextAccessor;
 
-    private readonly UserDbContext dbContext = dbContext;
-    private readonly IAuthServiceClient authServiceClient = authServiceClient;
-    private readonly ICoreServiceClient coreServiceClient = coreServiceClient;
-    private readonly ILogger<UserManagementService> logger =  logger;
-    private readonly IHttpContextAccessor _httpContextAccessor = httpContextAccessor;
-
-    //public UserManagementService(
-    //    UserDbContext dbContext,
-    //    IAuthServiceClient authServiceClient,
-    //    ICoreServiceClient coreServiceClient,
-    //    ILogger<UserManagementService> logger,
-    //    IHttpContextAccessor httpContextAccessor
-    //)
-    //{
-    //    this.dbContext = dbContext;
-    //    this.authServiceClient = authServiceClient;
-    //    this.coreServiceClient = coreServiceClient;
-    //    this.logger = logger;
-    //    _httpContextAccessor = httpContextAccessor;
-    //}
-
+    public UserManagementService(
+        UserDbContext dbContext,
+        IAuthServiceClient authServiceClient,
+        ICoreServiceClient coreServiceClient,
+        ILogger<UserManagementService> logger,
+        IHttpContextAccessor httpContextAccessor)
+    {
+        _dbContext = dbContext;
+        _authServiceClient = authServiceClient;
+        _coreServiceClient = coreServiceClient;
+        _logger = logger;
+        _httpContextAccessor = httpContextAccessor;
+    }
 
     public async Task<UsersResponse> GetUsersAsync(PagingQuery query, CancellationToken cancellationToken)
     {
-        var userIdClaim = _httpContextAccessor.HttpContext?.User?.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-        if (string.IsNullOrEmpty(userIdClaim) || !Guid.TryParse(userIdClaim, out var userId))
-            throw new UnauthorizedAccessException("User is not authenticated");
+        await EnsureCurrentUserIsAdminAsync(cancellationToken);
 
-
-        var userRole = await dbContext.Users
-            .Where(u => u.Id == userId)
-            .Select(u => u.Role)
-            .SingleOrDefaultAsync(cancellationToken);
-
-        if (userRole == null)
-            throw new UnauthorizedAccessException("User not found");
-
-        if (userRole != UserRole.Admin)
-            throw new UnauthorizedAccessException("Only admins can access this resource");
-
-        // Логика получения списка пользователей
         var filteredUsers = BuildUsersQuery(query);
         var totalElements = await filteredUsers.CountAsync(cancellationToken);
         var users = await GetUsersPageAsync(filteredUsers, query, cancellationToken);
@@ -91,7 +67,7 @@ public sealed class UserManagementService(
             throw;
         }
 
-        logger.LogInformation("Admin created user {UserId} with role {Role}", user.Id, user.Role);
+        _logger.LogInformation("Admin created user {UserId} with role {Role}", user.Id, user.Role);
         return user.ToResponse();
     }
 
@@ -102,15 +78,39 @@ public sealed class UserManagementService(
         var user = await FindUserOrThrowAsync(userId, cancellationToken);
         user.Status = request.Status;
 
-        await dbContext.SaveChangesAsync(cancellationToken);
+        await _dbContext.SaveChangesAsync(cancellationToken);
         await SyncStatusWithCoreAsync(user, cancellationToken);
 
         return user.ToResponse();
     }
 
+    private async Task EnsureCurrentUserIsAdminAsync(CancellationToken cancellationToken)
+    {
+        var userIdClaim = _httpContextAccessor.HttpContext?.User?.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        if (string.IsNullOrWhiteSpace(userIdClaim) || !Guid.TryParse(userIdClaim, out var userId))
+        {
+            throw new UnauthorizedAccessException("User is not authenticated");
+        }
+
+        var userRole = await _dbContext.Users
+            .Where(u => u.Id == userId)
+            .Select(u => (UserRole?)u.Role)
+            .SingleOrDefaultAsync(cancellationToken);
+
+        if (!userRole.HasValue)
+        {
+            throw new UnauthorizedAccessException("User not found");
+        }
+
+        if (userRole.Value != UserRole.Admin)
+        {
+            throw new UnauthorizedAccessException("Only admins can access this resource");
+        }
+    }
+
     private IQueryable<User> BuildUsersQuery(PagingQuery query)
     {
-        var users = dbContext.Users.AsNoTracking();
+        var users = _dbContext.Users.AsNoTracking();
 
         if (query.Role.HasValue)
         {
@@ -137,7 +137,7 @@ public sealed class UserManagementService(
 
     private async Task EnsureEmailUniqueAsync(string email, CancellationToken cancellationToken)
     {
-        var exists = await dbContext.Users.AnyAsync(x => x.Email == email, cancellationToken);
+        var exists = await _dbContext.Users.AnyAsync(x => x.Email == email, cancellationToken);
         if (exists)
         {
             throw new InvalidOperationException("User with this email already exists.");
@@ -161,25 +161,25 @@ public sealed class UserManagementService(
 
     private async Task PersistCreatedUserAsync(User user, CancellationToken cancellationToken)
     {
-        dbContext.Users.Add(user);
-        await dbContext.SaveChangesAsync(cancellationToken);
+        _dbContext.Users.Add(user);
+        await _dbContext.SaveChangesAsync(cancellationToken);
     }
 
     private async Task RegisterInAuthServiceAsync(User user, string password, CancellationToken cancellationToken)
     {
         var request = new RegisterCredentialsRequest(user.Id, user.Email, password, user.Role.ToString().ToUpperInvariant());
-        await authServiceClient.RegisterCredentialsAsync(request, cancellationToken);
+        await _authServiceClient.RegisterCredentialsAsync(request, cancellationToken);
     }
 
     private async Task RollbackCreatedUserAsync(User user, CancellationToken cancellationToken)
     {
-        dbContext.Users.Remove(user);
-        await dbContext.SaveChangesAsync(cancellationToken);
+        _dbContext.Users.Remove(user);
+        await _dbContext.SaveChangesAsync(cancellationToken);
     }
 
     private async Task<User> FindUserOrThrowAsync(Guid userId, CancellationToken cancellationToken)
     {
-        return await dbContext.Users.FirstOrDefaultAsync(x => x.Id == userId, cancellationToken)
+        return await _dbContext.Users.FirstOrDefaultAsync(x => x.Id == userId, cancellationToken)
             ?? throw new KeyNotFoundException("User not found.");
     }
 
@@ -194,6 +194,6 @@ public sealed class UserManagementService(
     private async Task SyncStatusWithCoreAsync(User user, CancellationToken cancellationToken)
     {
         var request = new UpdateAccountStateRequest(user.Id, user.Status.ToString().ToUpperInvariant());
-        await coreServiceClient.SyncUserStatusAsync(request, cancellationToken);
+        await _coreServiceClient.SyncUserStatusAsync(request, cancellationToken);
     }
 }

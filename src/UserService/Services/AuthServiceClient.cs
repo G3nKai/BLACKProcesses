@@ -17,6 +17,6 @@ public sealed class AuthServiceClient(HttpClient client, ILogger<AuthServiceClie
 
         var error = await response.Content.ReadAsStringAsync(cancellationToken);
         logger.LogError("AuthService rejected credential registration: {StatusCode} {Error}", response.StatusCode, error);
-        throw new HttpRequestException($"AuthService error during credentials provisioning: {(int)response.StatusCode}");
+        throw new HttpRequestException($"AuthService error during credentials provisioning: {(int)response.StatusCode}", null, response.StatusCode);
     }
 }

@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
+using System.Net;
 using System.Text;
 using System.Text.Json.Serialization;
 using UserService.Data;
@@ -110,6 +111,42 @@ builder.Services
 builder.Services.AddAuthorization();
 
 var app = builder.Build();
+
+app.Use(async (context, next) =>
+{
+    try
+    {
+        await next();
+    }
+    catch (Exception exception)
+    {
+        var (statusCode, title) = exception switch
+        {
+            ArgumentException => ((int)HttpStatusCode.BadRequest, "Некорректные данные запроса"),
+            InvalidOperationException => ((int)HttpStatusCode.Conflict, "Конфликт данных"),
+            KeyNotFoundException => ((int)HttpStatusCode.NotFound, "Ресурс не найден"),
+            UnauthorizedAccessException => ((int)HttpStatusCode.Unauthorized, "Доступ запрещён"),
+            HttpRequestException httpEx when httpEx.StatusCode.HasValue => ((int)httpEx.StatusCode.Value, "Ошибка внешнего сервиса"),
+            HttpRequestException => ((int)HttpStatusCode.BadGateway, "Внешний сервис недоступен"),
+            _ => ((int)HttpStatusCode.BadRequest, "Ошибка обработки запроса")
+        };
+
+        if (!context.Response.HasStarted)
+        {
+            context.Response.Clear();
+            context.Response.StatusCode = statusCode;
+            context.Response.ContentType = "application/problem+json";
+
+            await context.Response.WriteAsJsonAsync(new
+            {
+                title,
+                status = statusCode,
+                detail = exception.Message,
+                traceId = context.TraceIdentifier
+            });
+        }
+    }
+});
 
 app.UseSwagger();
 app.UseSwaggerUI();
