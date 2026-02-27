@@ -1,7 +1,10 @@
 using Microsoft.EntityFrameworkCore;
-using UserService.Contracts;
+using UserService.Contracts.Common;
+using UserService.Contracts.Requests;
+using UserService.Contracts.Responses;
 using UserService.Data;
 using UserService.Domain;
+using UserService.Domain.Enums;
 
 namespace UserService.Services;
 
@@ -20,33 +23,87 @@ public sealed class UserManagementService(
 {
     public async Task<UsersResponse> GetUsersAsync(PagingQuery query, CancellationToken cancellationToken)
     {
-        var filtered = dbContext.Users.AsNoTracking();
+        var filteredUsers = BuildUsersQuery(query);
+        var totalElements = await filteredUsers.CountAsync(cancellationToken);
+        var users = await GetUsersPageAsync(filteredUsers, query, cancellationToken);
+        var page = BuildPageInfo(query, totalElements);
 
-        if (query.Role.HasValue)
-        {
-            filtered = filtered.Where(u => u.Role == query.Role.Value);
-        }
-
-        var total = await filtered.CountAsync(cancellationToken);
-        var users = await filtered
-            .OrderByDescending(u => u.CreatedAt)
-            .Skip(query.Page * query.Size)
-            .Take(query.Size)
-            .ToListAsync(cancellationToken);
-
-        var totalPages = query.Size == 0 ? 0 : (int)Math.Ceiling(total / (double)query.Size);
-        return new UsersResponse(users.Select(u => u.ToResponse()).ToArray(), new PageInfo(query.Page, query.Size, total, totalPages));
+        return new UsersResponse(users.Select(x => x.ToResponse()).ToArray(), page);
     }
 
     public async Task<UserResponse> CreateUserAsync(CreateUserAdminRequest request, CancellationToken cancellationToken)
     {
-        var existing = await dbContext.Users.AnyAsync(x => x.Email == request.Email, cancellationToken);
-        if (existing)
+        await EnsureEmailUniqueAsync(request.Email, cancellationToken);
+
+        var user = BuildUser(request);
+        await PersistCreatedUserAsync(user, cancellationToken);
+
+        try
+        {
+            await RegisterInAuthServiceAsync(user, request.Password, cancellationToken);
+        }
+        catch
+        {
+            await RollbackCreatedUserAsync(user, cancellationToken);
+            throw;
+        }
+
+        logger.LogInformation("Admin created user {UserId} with role {Role}", user.Id, user.Role);
+        return user.ToResponse();
+    }
+
+    public async Task<UserResponse> UpdateStatusAsync(Guid userId, UpdateUserStatusRequest request, CancellationToken cancellationToken)
+    {
+        ValidateStatusUpdate(request.Status);
+
+        var user = await FindUserOrThrowAsync(userId, cancellationToken);
+        user.Status = request.Status;
+
+        await dbContext.SaveChangesAsync(cancellationToken);
+        await SyncStatusWithCoreAsync(user, cancellationToken);
+
+        return user.ToResponse();
+    }
+
+    private IQueryable<User> BuildUsersQuery(PagingQuery query)
+    {
+        var users = dbContext.Users.AsNoTracking();
+
+        if (query.Role.HasValue)
+        {
+            users = users.Where(x => x.Role == query.Role.Value);
+        }
+
+        return users;
+    }
+
+    private static async Task<List<User>> GetUsersPageAsync(IQueryable<User> users, PagingQuery query, CancellationToken cancellationToken)
+    {
+        return await users
+            .OrderByDescending(x => x.CreatedAt)
+            .Skip(query.Page * query.Size)
+            .Take(query.Size)
+            .ToListAsync(cancellationToken);
+    }
+
+    private static PageInfo BuildPageInfo(PagingQuery query, int totalElements)
+    {
+        var totalPages = query.Size == 0 ? 0 : (int)Math.Ceiling(totalElements / (double)query.Size);
+        return new PageInfo(query.Page, query.Size, totalElements, totalPages);
+    }
+
+    private async Task EnsureEmailUniqueAsync(string email, CancellationToken cancellationToken)
+    {
+        var exists = await dbContext.Users.AnyAsync(x => x.Email == email, cancellationToken);
+        if (exists)
         {
             throw new InvalidOperationException("User with this email already exists.");
         }
+    }
 
-        var user = new UserProfile
+    private static User BuildUser(CreateUserAdminRequest request)
+    {
+        return new User
         {
             Id = Guid.NewGuid(),
             Email = request.Email,
@@ -57,39 +114,43 @@ public sealed class UserManagementService(
             Status = UserStatus.Active,
             CreatedAt = DateTimeOffset.UtcNow
         };
-
-        dbContext.Users.Add(user);
-        await dbContext.SaveChangesAsync(cancellationToken);
-
-        try
-        {
-            await authServiceClient.RegisterCredentialsAsync(new RegisterCredentialsRequest(user.Id, user.Email, request.Password, user.Role.ToString().ToUpperInvariant()), cancellationToken);
-        }
-        catch
-        {
-            dbContext.Users.Remove(user);
-            await dbContext.SaveChangesAsync(cancellationToken);
-            throw;
-        }
-
-        logger.LogInformation("Admin created user {UserId} with role {Role}", user.Id, user.Role);
-        return user.ToResponse();
     }
 
-    public async Task<UserResponse> UpdateStatusAsync(Guid userId, UpdateUserStatusRequest request, CancellationToken cancellationToken)
+    private async Task PersistCreatedUserAsync(User user, CancellationToken cancellationToken)
     {
-        var user = await dbContext.Users.FirstOrDefaultAsync(x => x.Id == userId, cancellationToken)
-            ?? throw new KeyNotFoundException("User not found.");
+        dbContext.Users.Add(user);
+        await dbContext.SaveChangesAsync(cancellationToken);
+    }
 
-        if (request.Status is not (UserStatus.Active or UserStatus.Blocked))
+    private async Task RegisterInAuthServiceAsync(User user, string password, CancellationToken cancellationToken)
+    {
+        var request = new RegisterCredentialsRequest(user.Id, user.Email, password, user.Role.ToString().ToUpperInvariant());
+        await authServiceClient.RegisterCredentialsAsync(request, cancellationToken);
+    }
+
+    private async Task RollbackCreatedUserAsync(User user, CancellationToken cancellationToken)
+    {
+        dbContext.Users.Remove(user);
+        await dbContext.SaveChangesAsync(cancellationToken);
+    }
+
+    private async Task<User> FindUserOrThrowAsync(Guid userId, CancellationToken cancellationToken)
+    {
+        return await dbContext.Users.FirstOrDefaultAsync(x => x.Id == userId, cancellationToken)
+            ?? throw new KeyNotFoundException("User not found.");
+    }
+
+    private static void ValidateStatusUpdate(UserStatus status)
+    {
+        if (status is not (UserStatus.Active or UserStatus.Blocked))
         {
             throw new InvalidOperationException("Only ACTIVE or BLOCKED are supported by this endpoint.");
         }
+    }
 
-        user.Status = request.Status;
-        await dbContext.SaveChangesAsync(cancellationToken);
-
-        await coreServiceClient.SyncUserStatusAsync(new UpdateAccountStateRequest(user.Id, user.Status.ToString().ToUpperInvariant()), cancellationToken);
-        return user.ToResponse();
+    private async Task SyncStatusWithCoreAsync(User user, CancellationToken cancellationToken)
+    {
+        var request = new UpdateAccountStateRequest(user.Id, user.Status.ToString().ToUpperInvariant());
+        await coreServiceClient.SyncUserStatusAsync(request, cancellationToken);
     }
 }
