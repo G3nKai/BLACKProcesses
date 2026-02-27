@@ -12,4 +12,5 @@ public sealed class User
     public UserRole Role { get; set; } = UserRole.Client;
     public UserStatus Status { get; set; } = UserStatus.Pending;
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
+    public string PasswordHash { get; set; }
 }

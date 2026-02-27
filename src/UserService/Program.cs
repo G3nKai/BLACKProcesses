@@ -14,7 +14,8 @@ builder.Services
 
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
-builder.Services.AddDbContext<UserDbContext>(options => options.UseInMemoryDatabase("UserDb"));
+builder.Services.AddDbContext<UserDbContext>(options =>
+    options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
 
 builder.Services.AddScoped<IUserManagementService, UserManagementService>();
 
