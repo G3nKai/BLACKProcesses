@@ -13,6 +13,8 @@ builder.Services
     .AddControllers()
     .AddJsonOptions(options => options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter()));
 
+builder.Services.AddHttpContextAccessor();
+
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(options =>
 {
@@ -41,6 +43,7 @@ builder.Services.AddSwaggerGen(options =>
         }
     });
 });
+
 builder.Services.AddDbContext<UserDbContext>(options =>
     options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
 
@@ -56,11 +59,13 @@ builder.Services.AddHttpClient<ICoreServiceClient, CoreServiceClient>(client =>
     client.BaseAddress = new Uri(builder.Configuration["Services:CoreServiceUrl"] ?? "http://localhost:5000/api/");
 });
 
-var jwtIssuer = builder.Configuration["Jwt:Issuer"];
-var jwtAudience = builder.Configuration["Jwt:Audience"];
-var jwtKey = builder.Configuration["Jwt:SigningKey"]
-    ?? builder.Configuration["Jwt:Key"]
-    ?? "PLEASE_CHANGE_ME_FOR_LOCAL_DEV_ONLY";
+var jwtIssuer = builder.Configuration["Jwt:Issuer"] ?? "black.auth";
+var jwtAudience = builder.Configuration["Jwt:Audience"] ?? "black.api";
+var jwtKey = builder.Configuration["Jwt:Key"]
+    ?? builder.Configuration["Jwt:SigningKey"]
+    ?? "JTD1EH4cfUatNJhTcqhiCdimMTMtK46W3XNEEORDfJl";
+
+var signingKey = new SymmetricSecurityKey(Encoding.ASCII.GetBytes(jwtKey));
 
 builder.Services
     .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
@@ -69,10 +74,10 @@ builder.Services
         options.TokenValidationParameters = new TokenValidationParameters
         {
             ValidateIssuerSigningKey = true,
-            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtKey)),
-            ValidateIssuer = !string.IsNullOrWhiteSpace(jwtIssuer),
+            IssuerSigningKey = signingKey,
+            ValidateIssuer = true,
             ValidIssuer = jwtIssuer,
-            ValidateAudience = !string.IsNullOrWhiteSpace(jwtAudience),
+            ValidateAudience = true,
             ValidAudience = jwtAudience,
             ValidateLifetime = true,
             ClockSkew = TimeSpan.FromMinutes(1)
@@ -91,7 +96,7 @@ builder.Services
                 const string bearerPrefix = "Bearer ";
                 var token = authorization.Trim();
 
-                while (token.StartsWith(bearerPrefix, StringComparison.OrdinalIgnoreCase))
+                if (token.StartsWith(bearerPrefix, StringComparison.OrdinalIgnoreCase))
                 {
                     token = token[bearerPrefix.Length..].Trim();
                 }

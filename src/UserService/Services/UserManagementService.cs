@@ -1,4 +1,6 @@
 using Microsoft.EntityFrameworkCore;
+using System.Data;
+using System.Security.Claims;
 using UserService.Contracts.Common;
 using UserService.Contracts.Requests;
 using UserService.Contracts.Responses;
@@ -19,10 +21,51 @@ public sealed class UserManagementService(
     UserDbContext dbContext,
     IAuthServiceClient authServiceClient,
     ICoreServiceClient coreServiceClient,
-    ILogger<UserManagementService> logger) : IUserManagementService
+    ILogger<UserManagementService> logger,
+    IHttpContextAccessor httpContextAccessor) : IUserManagementService
 {
+
+    private readonly UserDbContext dbContext = dbContext;
+    private readonly IAuthServiceClient authServiceClient = authServiceClient;
+    private readonly ICoreServiceClient coreServiceClient = coreServiceClient;
+    private readonly ILogger<UserManagementService> logger =  logger;
+    private readonly IHttpContextAccessor _httpContextAccessor = httpContextAccessor;
+
+    //public UserManagementService(
+    //    UserDbContext dbContext,
+    //    IAuthServiceClient authServiceClient,
+    //    ICoreServiceClient coreServiceClient,
+    //    ILogger<UserManagementService> logger,
+    //    IHttpContextAccessor httpContextAccessor
+    //)
+    //{
+    //    this.dbContext = dbContext;
+    //    this.authServiceClient = authServiceClient;
+    //    this.coreServiceClient = coreServiceClient;
+    //    this.logger = logger;
+    //    _httpContextAccessor = httpContextAccessor;
+    //}
+
+
     public async Task<UsersResponse> GetUsersAsync(PagingQuery query, CancellationToken cancellationToken)
     {
+        var userIdClaim = _httpContextAccessor.HttpContext?.User?.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        if (string.IsNullOrEmpty(userIdClaim) || !Guid.TryParse(userIdClaim, out var userId))
+            throw new UnauthorizedAccessException("User is not authenticated");
+
+
+        var userRole = await dbContext.Users
+            .Where(u => u.Id == userId)
+            .Select(u => u.Role)
+            .SingleOrDefaultAsync(cancellationToken);
+
+        if (userRole == null)
+            throw new UnauthorizedAccessException("User not found");
+
+        if (userRole != UserRole.Admin)
+            throw new UnauthorizedAccessException("Only admins can access this resource");
+
+        // Логика получения списка пользователей
         var filteredUsers = BuildUsersQuery(query);
         var totalElements = await filteredUsers.CountAsync(cancellationToken);
         var users = await GetUsersPageAsync(filteredUsers, query, cancellationToken);

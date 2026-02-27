@@ -9,7 +9,7 @@ namespace UserService.Controllers;
 [ApiController]
 [Route("admin/users")]
 [Tags("User Service")]
-[Authorize(Roles = "ADMIN,EMPLOYEE")]
+[Authorize]
 public sealed class UserController(IUserManagementService userManagementService) : ControllerBase
 {
     [HttpGet]
