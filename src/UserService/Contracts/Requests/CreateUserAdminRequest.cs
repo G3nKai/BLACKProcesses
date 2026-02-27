@@ -1,7 +1,7 @@
 using System.ComponentModel.DataAnnotations;
-using UserService.Domain;
+using UserService.Domain.Enums;
 
-namespace UserService.Contracts;
+namespace UserService.Contracts.Requests;
 
 public sealed record CreateUserAdminRequest(
     [property: Required, EmailAddress] string Email,
@@ -10,8 +10,3 @@ public sealed record CreateUserAdminRequest(
     string? Phone,
     [property: Required] UserRole Role,
     [property: Required, MinLength(8)] string Password);
-
-public sealed record UpdateUserStatusRequest(
-    [property: Required] UserStatus Status);
-
-public sealed record PagingQuery(int Page = 0, int Size = 20, UserRole? Role = null);

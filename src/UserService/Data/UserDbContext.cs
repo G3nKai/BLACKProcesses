@@ -5,11 +5,11 @@ namespace UserService.Data;
 
 public sealed class UserDbContext(DbContextOptions<UserDbContext> options) : DbContext(options)
 {
-    public DbSet<UserProfile> Users => Set<UserProfile>();
+    public DbSet<User> Users => Set<User>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
-        var users = modelBuilder.Entity<UserProfile>();
+        var users = modelBuilder.Entity<User>();
         users.HasKey(x => x.Id);
         users.HasIndex(x => x.Email).IsUnique();
         users.Property(x => x.Email).HasMaxLength(250).IsRequired();
