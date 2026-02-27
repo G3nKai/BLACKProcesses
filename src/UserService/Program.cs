@@ -23,7 +23,7 @@ builder.Services.AddSwaggerGen(options =>
         Scheme = "bearer",
         BearerFormat = "JWT",
         In = ParameterLocation.Header,
-        Description = "Введите JWT токен в формате: Bearer {token}"
+        Description = "Введите только JWT токен (без префикса Bearer)"
     });
 
     options.AddSecurityRequirement(new OpenApiSecurityRequirement
@@ -74,6 +74,34 @@ builder.Services
             ValidAudience = jwtAudience,
             ValidateLifetime = true,
             ClockSkew = TimeSpan.FromMinutes(1)
+        };
+
+        options.Events = new JwtBearerEvents
+        {
+            OnMessageReceived = context =>
+            {
+                var authorization = context.Request.Headers.Authorization.ToString();
+                if (string.IsNullOrWhiteSpace(authorization))
+                {
+                    return Task.CompletedTask;
+                }
+
+                const string bearerPrefix = "Bearer ";
+                var token = authorization.Trim();
+
+                if (token.StartsWith(bearerPrefix, StringComparison.OrdinalIgnoreCase))
+                {
+                    token = token[bearerPrefix.Length..].Trim();
+                }
+
+                if (token.StartsWith(bearerPrefix, StringComparison.OrdinalIgnoreCase))
+                {
+                    token = token[bearerPrefix.Length..].Trim();
+                }
+
+                context.Token = token;
+                return Task.CompletedTask;
+            }
         };
     });
 
