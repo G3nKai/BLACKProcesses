@@ -1,7 +1,9 @@
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Diagnostics;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
+using System.Net;
 using System.Text;
 using System.Text.Json.Serialization;
 using UserService.Data;
@@ -110,6 +112,33 @@ builder.Services
 builder.Services.AddAuthorization();
 
 var app = builder.Build();
+
+app.UseExceptionHandler(errorApp =>
+{
+    errorApp.Run(async context =>
+    {
+        var exception = context.Features.Get<IExceptionHandlerFeature>()?.Error;
+
+        var (statusCode, title) = exception switch
+        {
+            ArgumentException => ((int)HttpStatusCode.BadRequest, "Некорректные данные запроса"),
+            KeyNotFoundException => ((int)HttpStatusCode.NotFound, "Ресурс не найден"),
+            UnauthorizedAccessException => ((int)HttpStatusCode.Unauthorized, "Доступ запрещён"),
+            _ => ((int)HttpStatusCode.BadRequest, "Ошибка обработки запроса")
+        };
+
+        context.Response.StatusCode = statusCode;
+        context.Response.ContentType = "application/problem+json";
+
+        await context.Response.WriteAsJsonAsync(new
+        {
+            title,
+            status = statusCode,
+            detail = exception?.Message,
+            traceId = context.TraceIdentifier
+        });
+    });
+});
 
 app.UseSwagger();
 app.UseSwaggerUI();
