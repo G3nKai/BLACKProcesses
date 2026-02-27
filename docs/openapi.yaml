@@ -1,0 +1,747 @@
+﻿openapi: 3.0.0
+info:
+  title: Patterns
+  description: TSU-Patterns-2026
+  version: 1.0.0
+
+servers:
+  - url: http://localhost:5000/api
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    Account:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        accountNumber:
+          type: string
+        userId:
+          type: string
+          format: uuid
+        balance:
+          type: number
+          format: double
+        currency:
+          type: string
+          enum: [RUB, USD, EUR]
+        status:
+          type: string
+          enum: [ACTIVE, BLOCKED, CLOSED]
+        createdAt:
+          type: string
+          format: date-time
+        closedAt:
+          type: string
+          format: date-time
+          nullable: true
+
+    Transaction:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        accountId:
+          type: string
+          format: uuid
+        type:
+          type: string
+          enum: [DEPOSIT, WITHDRAWAL, TRANSFER, CREDIT_PAYMENT, CREDIT_RECEIPT]
+        amount:
+          type: number
+          format: double
+        description:
+          type: string
+        timestamp:
+          type: string
+          format: date-time
+        balanceAfter:
+          type: number
+          format: double
+
+    User:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        email:
+          type: string
+          format: email
+        firstName:
+          type: string
+        lastName:
+          type: string
+        phone:
+          type: string
+        role:
+          type: string
+          enum: [CLIENT, EMPLOYEE, ADMIN]
+        status:
+          type: string
+          enum: [ACTIVE, BLOCKED, PENDING]
+        createdAt:
+          type: string
+          format: date-time
+
+    CreditTariff:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        interestRate:
+          type: number
+          format: float
+        minAmount:
+          type: number
+          format: double
+        maxAmount:
+          type: number
+          format: double
+        minTerm:
+          type: integer
+        maxTerm:
+          type: integer
+        status:
+          type: string
+          enum: [ACTIVE, INACTIVE]
+
+    Credit:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        userId:
+          type: string
+          format: uuid
+        accountId:
+          type: string
+          format: uuid
+        tariffId:
+          type: string
+          format: uuid
+        principal:
+          type: number
+          format: double
+        remainingAmount:
+          type: number
+          format: double
+        interestRate:
+          type: number
+          format: float
+        startDate:
+          type: string
+          format: date-time
+        endDate:
+          type: string
+          format: date-time
+        status:
+          type: string
+          enum: [ACTIVE, PAID, OVERDUE, DEFAULTED]
+
+    CreateAccountRequest:
+      type: object
+      required: [currency]
+      properties:
+        currency:
+          type: string
+          enum: [RUB, USD, EUR]
+        initialDeposit:
+          type: number
+          format: double
+          minimum: 0
+          default: 0
+
+    DepositRequest:
+      type: object
+      required: [amount]
+      properties:
+        amount:
+          type: number
+          format: double
+          minimum: 0.01
+        description:
+          type: string
+
+    WithdrawalRequest:
+      type: object
+      required: [amount]
+      properties:
+        amount:
+          type: number
+          format: double
+          minimum: 0.01
+        description:
+          type: string
+
+    RegisterClientRequest:
+      type: object
+      required: [email, firstName, lastName, password]
+      properties:
+        email:
+          type: string
+          format: email
+        firstName:
+          type: string
+        lastName:
+          type: string
+        phone:
+          type: string
+        password:
+          type: string
+          format: password
+
+    CreateUserAdminRequest:
+      type: object
+      required: [email, firstName, lastName, role, password]
+      properties:
+        email:
+          type: string
+          format: email
+        firstName:
+          type: string
+        lastName:
+          type: string
+        phone:
+          type: string
+        role:
+          type: string
+          enum: [CLIENT, EMPLOYEE, ADMIN]
+        password:
+          type: string
+          format: password
+
+    UpdateUserStatusRequest:
+      type: object
+      required: [status]
+      properties:
+        status:
+          type: string
+          enum: [ACTIVE, BLOCKED]
+
+    CreateCreditTariffRequest:
+      type: object
+      required: [name, interestRate, minAmount, maxAmount, minTerm, maxTerm]
+      properties:
+        name:
+          type: string
+        interestRate:
+          type: number
+          format: float
+          minimum: 0
+          maximum: 100
+        minAmount:
+          type: number
+          format: double
+        maxAmount:
+          type: number
+          format: double
+        minTerm:
+          type: integer
+        maxTerm:
+          type: integer
+
+    ApplyForCreditRequest:
+      type: object
+      required: [tariffId, amount, term]
+      properties:
+        tariffId:
+          type: string
+          format: uuid
+        amount:
+          type: number
+          format: double
+        term:
+          type: integer
+
+    CreditPaymentRequest:
+      type: object
+      required: [accountId, amount]
+      properties:
+        accountId:
+          type: string
+          format: uuid
+        amount:
+          type: number
+          format: double
+
+    PageInfo:
+      type: object
+      properties:
+        page:
+          type: integer
+        size:
+          type: integer
+        totalElements:
+          type: integer
+        totalPages:
+          type: integer
+
+    AccountsResponse:
+      type: object
+      properties:
+        content:
+          type: array
+          items:
+            $ref: '#/components/schemas/Account'
+        page:
+          $ref: '#/components/schemas/PageInfo'
+
+    TransactionsResponse:
+      type: object
+      properties:
+        content:
+          type: array
+          items:
+            $ref: '#/components/schemas/Transaction'
+        page:
+          $ref: '#/components/schemas/PageInfo'
+
+    UsersResponse:
+      type: object
+      properties:
+        content:
+          type: array
+          items:
+            $ref: '#/components/schemas/User'
+        page:
+          $ref: '#/components/schemas/PageInfo'
+
+    CreditsResponse:
+      type: object
+      properties:
+        content:
+          type: array
+          items:
+            $ref: '#/components/schemas/Credit'
+        page:
+          $ref: '#/components/schemas/PageInfo'
+
+    CreditTariffsResponse:
+      type: object
+      properties:
+        content:
+          type: array
+          items:
+            $ref: '#/components/schemas/CreditTariff'
+        page:
+          $ref: '#/components/schemas/PageInfo'
+
+  parameters:
+    pageParam:
+      name: page
+      in: query
+      schema:
+        type: integer
+        default: 0
+    sizeParam:
+      name: size
+      in: query
+      schema:
+        type: integer
+        default: 20
+    fromDateParam:
+      name: fromDate
+      in: query
+      schema:
+        type: string
+        format: date-time
+    toDateParam:
+      name: toDate
+      in: query
+      schema:
+        type: string
+        format: date-time
+    userIdParam:
+      name: userId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    accountIdParam:
+      name: accountId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    creditIdParam:
+      name: creditId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    tariffIdParam:
+      name: tariffId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+
+security:
+  - bearerAuth: []
+
+paths:
+  /accounts:
+    get:
+      tags: [Core Service (Accounts)]
+      summary: Получить счета текущего пользователя
+      parameters:
+        - $ref: '#/components/parameters/pageParam'
+        - $ref: '#/components/parameters/sizeParam'
+      responses:
+        '200':
+          description: Успешный ответ
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccountsResponse'
+    post:
+      tags: [Core Service (Accounts)]
+      summary: Открыть новый счет
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateAccountRequest'
+      responses:
+        '201':
+          description: Счет создан
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Account'
+
+  /accounts/{accountId}:
+    get:
+      tags: [Core Service (Accounts)]
+      summary: Получить информацию о счете
+      parameters:
+        - $ref: '#/components/parameters/accountIdParam'
+      responses:
+        '200':
+          description: Успешный ответ
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Account'
+    delete:
+      tags: [Core Service (Accounts)]
+      summary: Закрыть счет
+      parameters:
+        - $ref: '#/components/parameters/accountIdParam'
+      responses:
+        '204':
+          description: Счет закрыт
+
+  /accounts/{accountId}/transactions:
+    get:
+      tags: [Core Service (Accounts)]
+      summary: Получить историю операций по счету
+      parameters:
+        - $ref: '#/components/parameters/accountIdParam'
+        - $ref: '#/components/parameters/pageParam'
+        - $ref: '#/components/parameters/sizeParam'
+        - $ref: '#/components/parameters/fromDateParam'
+        - $ref: '#/components/parameters/toDateParam'
+      responses:
+        '200':
+          description: Успешный ответ
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TransactionsResponse'
+
+  /accounts/{accountId}/deposit:
+    post:
+      tags: [Core Service (Accounts)]
+      summary: Внести деньги на счет (ручное пополнение клиентом)
+      parameters:
+        - $ref: '#/components/parameters/accountIdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DepositRequest'
+      responses:
+        '200':
+          description: Операция выполнена
+
+  /accounts/{accountId}/withdraw:
+    post:
+      tags: [Core Service (Accounts)]
+      summary: Снять деньги со счета (ручное снятие клиентом)
+      parameters:
+        - $ref: '#/components/parameters/accountIdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WithdrawalRequest'
+      responses:
+        '200':
+          description: Операция выполнена
+
+  /admin/accounts:
+    get:
+      tags: [Core Service (Accounts)]
+      summary: Получить все счета всех клиентов (для сотрудников)
+      parameters:
+        - $ref: '#/components/parameters/pageParam'
+        - $ref: '#/components/parameters/sizeParam'
+        - name: userId
+          in: query
+          schema:
+            type: string
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [ACTIVE, BLOCKED, CLOSED]
+      responses:
+        '200':
+          description: Успешный ответ
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccountsResponse'
+
+  /admin/accounts/{accountId}/transactions:
+    get:
+      tags: [Core Service (Accounts)]
+      summary: Получить историю операций по любому счету (для сотрудников)
+      parameters:
+        - $ref: '#/components/parameters/accountIdParam'
+        - $ref: '#/components/parameters/pageParam'
+        - $ref: '#/components/parameters/sizeParam'
+      responses:
+        '200':
+          description: Успешный ответ
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TransactionsResponse'
+
+  /credits/tariffs:
+    get:
+      tags: [Credit Service]
+      summary: Получить список доступных кредитных тарифов
+      parameters:
+        - $ref: '#/components/parameters/pageParam'
+        - $ref: '#/components/parameters/sizeParam'
+      responses:
+        '200':
+          description: Успешный ответ
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreditTariffsResponse'
+
+  /credits/apply:
+    post:
+      tags: [Credit Service]
+      summary: Оформить кредит
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ApplyForCreditRequest'
+      responses:
+        '201':
+          description: Кредит оформлен
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Credit'
+
+  /credits/my:
+    get:
+      tags: [Credit Service]
+      summary: Получить свои кредиты
+      parameters:
+        - $ref: '#/components/parameters/pageParam'
+        - $ref: '#/components/parameters/sizeParam'
+      responses:
+        '200':
+          description: Успешный ответ
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreditsResponse'
+
+  /credits/{creditId}:
+    get:
+      tags: [Credit Service]
+      summary: Получить детальную информацию о кредите
+      parameters:
+        - $ref: '#/components/parameters/creditIdParam'
+      responses:
+        '200':
+          description: Успешный ответ
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Credit'
+
+  /credits/{creditId}/pay:
+    post:
+      tags: [Credit Service]
+      summary: Погасить кредит
+      parameters:
+        - $ref: '#/components/parameters/creditIdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreditPaymentRequest'
+      responses:
+        '200':
+          description: Платеж выполнен
+
+  /admin/credits:
+    get:
+      tags: [Credit Service]
+      summary: Получить все кредиты всех клиентов (для сотрудников)
+      parameters:
+        - $ref: '#/components/parameters/pageParam'
+        - $ref: '#/components/parameters/sizeParam'
+      responses:
+        '200':
+          description: Успешный ответ
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreditsResponse'
+
+  /admin/credit-tariffs:
+    post:
+      tags: [Credit Service]
+      summary: Создать новый кредитный тариф
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateCreditTariffRequest'
+      responses:
+        '201':
+          description: Тариф создан
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreditTariff'
+
+  /auth/login:
+    post:
+      tags: [Auth Service]
+      summary: Вход в систему
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email:
+                  type: string
+                  format: email
+                password:
+                  type: string
+                  format: password
+      responses:
+        '200':
+          description: Успешный вход
+
+  /auth/register:
+    post:
+      tags: [Auth Service]
+      summary: Регистрация нового клиента (публичный доступ)
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterClientRequest'
+      responses:
+        '201':
+          description: Пользователь (CLIENT) зарегистрирован
+
+  /admin/users:
+    get:
+      tags: [User Service]
+      summary: Получить список всех пользователей
+      parameters:
+        - $ref: '#/components/parameters/pageParam'
+        - $ref: '#/components/parameters/sizeParam'
+        - name: role
+          in: query
+          schema:
+            type: string
+            enum: [CLIENT, EMPLOYEE, ADMIN]
+      responses:
+        '200':
+          description: Успешный ответ
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UsersResponse'
+
+    post:
+      tags: [User Service]
+      summary: Создать пользователя (клиента или сотрудника) вручную
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateUserAdminRequest'
+      responses:
+        '201':
+          description: Пользователь создан
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+
+  /admin/users/{userId}/status:
+    patch:
+      tags: [User Service]
+      summary: Заблокировать или разблокировать пользователя
+      parameters:
+        - $ref: '#/components/parameters/userIdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateUserStatusRequest'
+      responses:
+        '200':
+          description: Статус обновлен
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
