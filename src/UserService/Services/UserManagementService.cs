@@ -52,20 +52,17 @@ public sealed class UserManagementService : IUserManagementService
 
     public async Task<UserResponse> CreateUserAsync(CreateUserAdminRequest request, CancellationToken cancellationToken)
     {
+        await EnsureCurrentUserIsAdminAsync(cancellationToken);
+
         await EnsureEmailUniqueAsync(request.Email, cancellationToken);
 
         var user = BuildUser(request);
-        await PersistCreatedUserAsync(user, cancellationToken);
 
-        try
+        if (user.Role.ToString().ToUpper() != UserRole.CLIENT.ToString() && user.Role.ToString().ToUpper() != UserRole.EMPLOYEE.ToString())
         {
-            await RegisterInAuthServiceAsync(user, request.Password, cancellationToken);
+            throw new InvalidOperationException("User can have only EMPLOYEE or CLIENT role.");
         }
-        catch
-        {
-            await RollbackCreatedUserAsync(user, cancellationToken);
-            throw;
-        }
+        await PersistCreatedUserAsync(user, cancellationToken);
 
         _logger.LogInformation("Admin created user {UserId} with role {Role}", user.Id, user.Role);
         return user.ToResponse();
@@ -102,7 +99,7 @@ public sealed class UserManagementService : IUserManagementService
             throw new UnauthorizedAccessException("User not found");
         }
 
-        if (userRole.Value != UserRole.Admin)
+        if (userRole.Value != UserRole.ADMIN)
         {
             throw new UnauthorizedAccessException("Only admins can access this resource");
         }
@@ -154,7 +151,7 @@ public sealed class UserManagementService : IUserManagementService
             LastName = request.LastName,
             Phone = request.Phone,
             Role = request.Role,
-            Status = UserStatus.Active,
+            Status = UserStatus.ACTIVE,
             CreatedAt = DateTimeOffset.UtcNow
         };
     }
@@ -167,7 +164,7 @@ public sealed class UserManagementService : IUserManagementService
 
     private async Task RegisterInAuthServiceAsync(User user, string password, CancellationToken cancellationToken)
     {
-        var request = new RegisterCredentialsRequest(user.Id, user.Email, password, user.Role.ToString().ToUpperInvariant());
+        var request = new RegisterCredentialsRequest(user.Id, user.Email, password, user.Role);
         await _authServiceClient.RegisterCredentialsAsync(request, cancellationToken);
     }
 
@@ -185,7 +182,7 @@ public sealed class UserManagementService : IUserManagementService
 
     private static void ValidateStatusUpdate(UserStatus status)
     {
-        if (status is not (UserStatus.Active or UserStatus.Blocked))
+        if (status is not (UserStatus.ACTIVE or UserStatus.BLOCKED))
         {
             throw new InvalidOperationException("Only ACTIVE or BLOCKED are supported by this endpoint.");
         }
@@ -193,7 +190,7 @@ public sealed class UserManagementService : IUserManagementService
 
     private async Task SyncStatusWithCoreAsync(User user, CancellationToken cancellationToken)
     {
-        var request = new UpdateAccountStateRequest(user.Id, user.Status.ToString().ToUpperInvariant());
+        var request = new UpdateAccountStateRequest(user.Id, user.Status);
         await _coreServiceClient.SyncUserStatusAsync(request, cancellationToken);
     }
 }

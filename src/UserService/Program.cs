@@ -123,13 +123,13 @@ app.Use(async (context, next) =>
     {
         var (statusCode, title) = exception switch
         {
-            ArgumentException => ((int)HttpStatusCode.BadRequest, "Некорректные данные запроса"),
-            InvalidOperationException => ((int)HttpStatusCode.Conflict, "Конфликт данных"),
-            KeyNotFoundException => ((int)HttpStatusCode.NotFound, "Ресурс не найден"),
-            UnauthorizedAccessException => ((int)HttpStatusCode.Unauthorized, "Доступ запрещён"),
-            HttpRequestException httpEx when httpEx.StatusCode.HasValue => ((int)httpEx.StatusCode.Value, "Ошибка внешнего сервиса"),
-            HttpRequestException => ((int)HttpStatusCode.BadGateway, "Внешний сервис недоступен"),
-            _ => ((int)HttpStatusCode.BadRequest, "Ошибка обработки запроса")
+            ArgumentException => ((int)HttpStatusCode.BadRequest, "Некорректные данные запроса\nexception.Message"),
+            InvalidOperationException => ((int)HttpStatusCode.Conflict, "Конфликт данных\nexception.Message"),
+            KeyNotFoundException => ((int)HttpStatusCode.NotFound, "Ресурс не найден\nexception.Message"),
+            UnauthorizedAccessException => ((int)HttpStatusCode.Unauthorized, "Доступ запрещён\nexception.Message"),
+            HttpRequestException httpEx when httpEx.StatusCode.HasValue => ((int)httpEx.StatusCode.Value, "Ошибка внешнего сервиса\nexception.Message"),
+            HttpRequestException => ((int)HttpStatusCode.BadGateway, "Внешний сервис недоступен\nexception.Message"),
+            _ => ((int)HttpStatusCode.BadRequest, "Ошибка обработки запроса\nexception.Message")
         };
 
         if (!context.Response.HasStarted)
