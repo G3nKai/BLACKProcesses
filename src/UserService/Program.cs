@@ -6,6 +6,7 @@ using Microsoft.OpenApi.Models;
 using System.Net;
 using System.Text;
 using System.Text.Json.Serialization;
+using UserService.Contracts.Responses;
 using UserService.Data;
 using UserService.Services;
 
@@ -50,16 +51,6 @@ builder.Services.AddDbContext<UserDbContext>(options =>
     options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
 
 builder.Services.AddScoped<IUserManagementService, UserManagementService>();
-
-builder.Services.AddHttpClient<IAuthServiceClient, AuthServiceClient>(client =>
-{
-    client.BaseAddress = new Uri(builder.Configuration["Services:AuthServiceUrl"] ?? "http://localhost:5001/api/");
-});
-
-builder.Services.AddHttpClient<ICoreServiceClient, CoreServiceClient>(client =>
-{
-    client.BaseAddress = new Uri(builder.Configuration["Services:CoreServiceUrl"] ?? "http://localhost:5000/api/");
-});
 
 var jwtIssuer = builder.Configuration["Jwt:Issuer"] ?? "black.auth";
 var jwtAudience = builder.Configuration["Jwt:Audience"] ?? "black.api";
@@ -125,6 +116,7 @@ app.Use(async (context, next) =>
         {
             ArgumentException => ((int)HttpStatusCode.BadRequest, "Некорректные данные запроса\nexception.Message"),
             InvalidOperationException => ((int)HttpStatusCode.Conflict, "Конфликт данных\nexception.Message"),
+            ForbiddenException => ((int)HttpStatusCode.Forbidden, "Доступ запрещен\n{exception.Message}"),
             KeyNotFoundException => ((int)HttpStatusCode.NotFound, "Ресурс не найден\nexception.Message"),
             UnauthorizedAccessException => ((int)HttpStatusCode.Unauthorized, "Доступ запрещён\nexception.Message"),
             HttpRequestException httpEx when httpEx.StatusCode.HasValue => ((int)httpEx.StatusCode.Value, "Ошибка внешнего сервиса\nexception.Message"),

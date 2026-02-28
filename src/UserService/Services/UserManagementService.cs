@@ -19,21 +19,15 @@ public interface IUserManagementService
 public sealed class UserManagementService : IUserManagementService
 {
     private readonly UserDbContext _dbContext;
-    private readonly IAuthServiceClient _authServiceClient;
-    private readonly ICoreServiceClient _coreServiceClient;
     private readonly ILogger<UserManagementService> _logger;
     private readonly IHttpContextAccessor _httpContextAccessor;
 
     public UserManagementService(
         UserDbContext dbContext,
-        IAuthServiceClient authServiceClient,
-        ICoreServiceClient coreServiceClient,
         ILogger<UserManagementService> logger,
         IHttpContextAccessor httpContextAccessor)
     {
         _dbContext = dbContext;
-        _authServiceClient = authServiceClient;
-        _coreServiceClient = coreServiceClient;
         _logger = logger;
         _httpContextAccessor = httpContextAccessor;
     }
@@ -76,7 +70,6 @@ public sealed class UserManagementService : IUserManagementService
         user.Status = request.Status;
 
         await _dbContext.SaveChangesAsync(cancellationToken);
-        await SyncStatusWithCoreAsync(user, cancellationToken);
 
         return user.ToResponse();
     }
@@ -101,7 +94,7 @@ public sealed class UserManagementService : IUserManagementService
 
         if (userRole.Value != UserRole.ADMIN)
         {
-            throw new UnauthorizedAccessException("Only admins can access this resource");
+            throw new ForbiddenException("Only admins can access this resource");
         }
     }
 
@@ -162,18 +155,6 @@ public sealed class UserManagementService : IUserManagementService
         await _dbContext.SaveChangesAsync(cancellationToken);
     }
 
-    private async Task RegisterInAuthServiceAsync(User user, string password, CancellationToken cancellationToken)
-    {
-        var request = new RegisterCredentialsRequest(user.Id, user.Email, password, user.Role);
-        await _authServiceClient.RegisterCredentialsAsync(request, cancellationToken);
-    }
-
-    private async Task RollbackCreatedUserAsync(User user, CancellationToken cancellationToken)
-    {
-        _dbContext.Users.Remove(user);
-        await _dbContext.SaveChangesAsync(cancellationToken);
-    }
-
     private async Task<User> FindUserOrThrowAsync(Guid userId, CancellationToken cancellationToken)
     {
         return await _dbContext.Users.FirstOrDefaultAsync(x => x.Id == userId, cancellationToken)
@@ -186,11 +167,5 @@ public sealed class UserManagementService : IUserManagementService
         {
             throw new InvalidOperationException("Only ACTIVE or BLOCKED are supported by this endpoint.");
         }
-    }
-
-    private async Task SyncStatusWithCoreAsync(User user, CancellationToken cancellationToken)
-    {
-        var request = new UpdateAccountStateRequest(user.Id, user.Status);
-        await _coreServiceClient.SyncUserStatusAsync(request, cancellationToken);
     }
 }
